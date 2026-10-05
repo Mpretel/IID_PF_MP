@@ -181,15 +181,24 @@ def annotations_to_epochs(annotations: mne.Annotations, psg_duration_s: float) -
     return epochs
 
 
-def mark_analysis_window(epochs: pd.DataFrame, padding_min: float = config.WAKE_PADDING_MIN) -> pd.DataFrame:
-    """Marca la ventana de análisis: desde `padding_min` antes del primer epoch de sueño
-    hasta `padding_min` después del último (recorte de la vigilia extensa de los registros SC).
+def mark_analysis_window(epochs: pd.DataFrame, start_datetime: datetime,
+                         padding_min: float = config.WAKE_PADDING_MIN) -> pd.DataFrame:
+    """Marca la ventana de análisis del período de sueño nocturno.
+
+    1. Se consideran solo los epochs de sueño (N1-N3, REM) cuya hora del día cae en la
+       franja nocturna [NIGHT_START_HOUR, NIGHT_END_HOUR): así una siesta diurna no
+       extiende la "noche" a todo el registro de ~20 h.
+    2. La ventana va desde `padding_min` antes del primer epoch de sueño nocturno hasta
+       `padding_min` después del último (recorte de la vigilia extensa).
 
     No elimina filas: agrega `in_analysis_window` para que el recorte quede documentado.
     """
-    sleep = epochs["stage"].isin(["N1", "N2", "N3", "REM"])
+    clock = pd.Timestamp(start_datetime) + pd.to_timedelta(epochs["start_sec"], unit="s")
+    hour = clock.dt.hour + clock.dt.minute / 60
+    nocturnal = (hour >= config.NIGHT_START_HOUR) | (hour < config.NIGHT_END_HOUR)
+    sleep = epochs["stage"].isin(["N1", "N2", "N3", "REM"]) & nocturnal & epochs["has_signal"]
     if not sleep.any():
-        raise RecordingValidationError("El hipnograma no contiene ningún epoch de sueño.")
+        raise RecordingValidationError("El hipnograma no contiene sueño dentro de la franja nocturna.")
     padding_s = padding_min * 60
     first_sleep = epochs.loc[sleep, "start_sec"].min()
     last_sleep = epochs.loc[sleep, "start_sec"].max()

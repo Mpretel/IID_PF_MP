@@ -44,7 +44,13 @@ SUBJECTS_METADATA_FILENAME = "SC-subjects.xls"
 #   - SUBJECT_IDS: lista explícita de IDs (tiene prioridad sobre N_SUBJECTS).
 #   - NIGHTS: noches a incluir (algunos sujetos tienen solo una).
 N_SUBJECTS = 10
-SUBJECT_IDS: list[int] | None = None
+# Muestra estratificada por sexo y edad (los primeros 10 IDs son todas mujeres de
+# 25-34 años). Regla: para cada sexo, entre los sujetos con 2 noches, el más
+# cercano a los cuantiles 10/30/50/70/90 % de edad.
+#   F: 5 (28 años), 20 (51), 22 (56), 40 (67), 65 (88)
+#   M: 14 (27), 38 (51), 33 (60), 50 (71), 76 (90)
+# Con SUBJECT_IDS = None se usan los primeros N_SUBJECTS sujetos por ID.
+SUBJECT_IDS: list[int] | None = [5, 14, 20, 22, 33, 38, 40, 50, 65, 76]
 NIGHTS: tuple[int, ...] = (1, 2)
 
 # Validación de tamaño mínimo de descarga (bytes). Un PSG de SC pesa ~40-50 MB
@@ -65,6 +71,10 @@ EPOCH_DURATION_S = 30.0
 # Recorte de vigilia: se conservan solo estos minutos de W antes del primer
 # epoch de sueño y después del último (los registros SC duran ~20 h).
 WAKE_PADDING_MIN = 30
+# El sueño se busca solo dentro de esta franja horaria (hora local del registro),
+# para que las siestas diurnas no extiendan la "noche" a todo el registro.
+NIGHT_START_HOUR = 21
+NIGHT_END_HOUR = 12
 
 # Filtro pasa-banda aplicado a la señal continua antes de segmentar.
 L_FREQ_HZ = 0.5

@@ -20,7 +20,9 @@ descriptivos (sin inferencia estadística).
 [10.13026/C2X676](https://doi.org/10.13026/C2X676)), subconjunto *sleep-cassette*: polisomnografías de personas
 sanas con hipnogramas puntuados por expertos. Se usan los canales EEG **Fpz-Cz** y **Pz-Oz** (100 Hz).
 
-Por defecto se procesan **10 sujetos × 2 noches** (`N_SUBJECTS` en `src/config.py`). Los archivos se descargan
+Por defecto se procesan **10 sujetos × 2 noches**, estratificados por sexo y edad: 5 mujeres y 5 hombres de 27 a
+90 años (`SUBJECT_IDS` en `src/config.py`). Los primeros 10 IDs del dataset son todas mujeres de 25–34 años, por eso
+no se usan. Con `SUBJECT_IDS = None` se toman los primeros `N_SUBJECTS` sujetos. Los archivos se descargan
 programáticamente y se verifican contra los SHA256 oficiales.
 
 ## Arquitectura

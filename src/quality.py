@@ -97,9 +97,10 @@ def missing_data_report(epochs: pd.DataFrame, features: pd.DataFrame) -> pd.Data
         ("epoch", "Epoch del hipnograma sin señal EEG", (~epochs["has_signal"]).sum(), n_epochs,
          "El hipnograma se extiende más allá del final del PSG",
          "Excluido: no hay señal de la cual extraer features"),
-        ("epoch", "Vigilia fuera de la ventana de análisis", (epochs["has_signal"] & ~epochs["in_analysis_window"]).sum(), n_epochs,
-         f"Registros de ~20 h; se conservan {config.WAKE_PADDING_MIN} min de W antes/después del sueño",
-         "Excluido por diseño (no es un faltante): evita que W domine el análisis"),
+        ("epoch", "Fuera de la ventana nocturna (vigilia y siestas)", (epochs["has_signal"] & ~epochs["in_analysis_window"]).sum(), n_epochs,
+         f"Registros de ~20 h; se conservan {config.WAKE_PADDING_MIN} min de W antes/después del sueño "
+         f"nocturno ({config.NIGHT_START_HOUR}:00-{config.NIGHT_END_HOUR}:00)",
+         "Excluido por diseño (no es un faltante): evita que W y las siestas diurnas dominen el análisis"),
         ("epoch", "Etapa desconocida ('?') en ventana", (window & (epochs["stage"] == "UNK")).sum(), n_epochs,
          "El experto no asignó etapa",
          "Se conserva con etapa UNK; no se imputa; se excluye de comparaciones entre etapas"),

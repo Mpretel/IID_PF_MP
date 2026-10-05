@@ -176,6 +176,11 @@ def run_bids(manifest: pd.DataFrame, overwrite: bool = False) -> pd.DataFrame:
             "night": rec.night,
             "bids_file": bids_path.fpath.relative_to(config.PROJECT_ROOT).as_posix(),
         })
+    selected = {f"sub-{bids_subject_label(s)}" for s in files["subject"]}
+    stale = sorted(p.name for p in config.BIDS_DIR.glob("sub-*") if p.name not in selected)
+    if stale:
+        logger.warning("data/bids contiene sujetos fuera de la selección actual: %s. "
+                       "Borrar data/bids para regenerarlo solo con la selección.", stale)
     write_dataset_description()
     write_participants(sorted(files["subject"].unique()))
     return pd.DataFrame(rows)

@@ -33,7 +33,7 @@ MISSING_REPORT_PATH = config.PROCESSED_DIR / "missing_report.csv"
 ENVIRONMENT_PATH = config.PROCESSED_DIR / "environment.json"
 
 # Incrementar cuando cambie el código de cálculo (no solo parámetros) para invalidar el caché.
-TRANSFORM_CODE_VERSION = 2
+TRANSFORM_CODE_VERSION = 3
 
 TRACKED_PACKAGES = ["numpy", "pandas", "scipy", "mne", "mne-bids", "antropy", "pyarrow", "plotly", "streamlit"]
 
@@ -45,6 +45,7 @@ def processing_params() -> dict:
         "eeg_channels": config.EEG_CHANNELS,
         "epoch_s": config.EPOCH_DURATION_S,
         "wake_padding_min": config.WAKE_PADDING_MIN,
+        "night_hours": [config.NIGHT_START_HOUR, config.NIGHT_END_HOUR],
         "filter": [config.L_FREQ_HZ, config.H_FREQ_HZ, config.FILTER_EDGE_PAD_S],
         "stage_mapping": config.STAGE_MAPPING,
         "bands": config.FREQ_BANDS,
@@ -90,7 +91,7 @@ def process_recording(recording_id: str, psg_path: Path, hyp_path: Path, force: 
         logger.warning(warning)
 
     epochs = preprocessing.annotations_to_epochs(preprocessing.read_hypnogram(hyp_path), info["psg_duration_s"])
-    epochs = preprocessing.mark_analysis_window(epochs)
+    epochs = preprocessing.mark_analysis_window(epochs, info["start_datetime"])
     usable = epochs[epochs["in_analysis_window"] & epochs["has_signal"]]
 
     raw = preprocessing.crop_and_filter(preprocessing.load_eeg(psg_path, hyp_path), epochs)
