@@ -103,3 +103,38 @@ def validate_oltp(tidy: pd.DataFrame, path=config.OLTP_DB_PATH, rel_tolerance: f
                f"Potencia relativa recalculada en la vista coincide (max |dif| = {max_diff:.1e})",
                f"La vista v_eeg_feature difiere de la tidy (max |dif| = {max_diff:.1e})"),
     ]
+
+
+def validate_dw(oltp_path=config.OLTP_DB_PATH, dw_path=config.DW_DB_PATH) -> list[str]:
+    """FK del DW, grano único, conteo igual al OLTP y reproducibilidad de las consultas."""
+    from src import database_dw, database_oltp, queries
+
+    with database_oltp.connect(oltp_path) as conn:
+        n_oltp = conn.execute("SELECT COUNT(*) FROM eeg_feature").fetchone()[0]
+    conn.close()
+    with database_dw.connect(dw_path) as conn:
+        fk_violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        n_fact = conn.execute("SELECT COUNT(*) FROM fact_eeg_epoch").fetchone()[0]
+        n_grain = conn.execute(
+            "SELECT COUNT(*) FROM (SELECT DISTINCT recording_key, epoch_number, channel_key FROM fact_eeg_epoch)"
+        ).fetchone()[0]
+        subject_mismatch = conn.execute(
+            "SELECT COUNT(*) FROM (SELECT recording_key FROM fact_eeg_epoch "
+            "GROUP BY recording_key HAVING COUNT(DISTINCT subject_key) > 1)").fetchone()[0]
+    conn.close()
+
+    not_reproducible = [
+        name for name in queries.QUERIES
+        if not queries.run_query(name, path=dw_path).equals(queries.run_query(name, path=dw_path))
+    ]
+    return [
+        _check(not fk_violations, "DW: PRAGMA foreign_key_check sin violaciones", f"Violaciones de FK en DW: {fk_violations[:5]}"),
+        _check(n_fact == n_oltp, f"fact_eeg_epoch: {n_fact} filas = eeg_feature del OLTP",
+               f"fact_eeg_epoch tiene {n_fact} filas y eeg_feature {n_oltp}"),
+        _check(n_grain == n_fact, "Grano respetado: (registro, epoch, canal) único en la tabla de hechos",
+               f"{n_fact - n_grain} filas repiten el grano (registro, epoch, canal)"),
+        _check(subject_mismatch == 0, "Cada registro pertenece a un único sujeto",
+               f"{subject_mismatch} registros asociados a más de un sujeto"),
+        _check(not not_reproducible, f"{len(queries.QUERIES)} consultas analíticas reproducibles",
+               f"Consultas con resultados distintos entre ejecuciones: {not_reproducible}"),
+    ]
