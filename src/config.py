@@ -43,7 +43,7 @@ SUBJECTS_METADATA_FILENAME = "SC-subjects.xls"
 #   - N_SUBJECTS: se toman los primeros N sujetos disponibles (orden por ID).
 #   - SUBJECT_IDS: lista explícita de IDs (tiene prioridad sobre N_SUBJECTS).
 #   - NIGHTS: noches a incluir (algunos sujetos tienen solo una).
-N_SUBJECTS = 2
+N_SUBJECTS = 10
 SUBJECT_IDS: list[int] | None = None
 NIGHTS: tuple[int, ...] = (1, 2)
 

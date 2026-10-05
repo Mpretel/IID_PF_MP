@@ -36,7 +36,8 @@ def flag_artifacts(epochs_uv: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
       - non_finite: algún valor NaN/inf;
       - flat_signal: desvío estándar < ARTIFACT_MIN_STD_UV (electrodo desconectado);
       - excessive_amplitude: pico a pico > ARTIFACT_MAX_PTP_UV (no fisiológico
-        en EEG de superficie; ~2x el percentil 99 de N3 observado).
+        en EEG de superficie; por encima del máximo observado en los datos,
+        ~435 µV, que corresponde a ondas lentas de N3 en Fpz-Cz).
 
     Devuelve (is_artifact bool, artifact_reason str) de forma (n_epochs, n_canales).
     Si se cumplen varios criterios, los motivos se concatenan con ';'.
