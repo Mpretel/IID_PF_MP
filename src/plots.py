@@ -139,6 +139,7 @@ def band_power_by_stage(rel_power: pd.DataFrame, channel: str) -> go.Figure:
     """¿Qué bandas dominan cada etapa? Potencia relativa media, un panel por banda
     (ejes Y independientes: delta ~0.8 y beta ~0.02 no son legibles en una misma escala)."""
     data = rel_power[(rel_power["channel"] == channel) & rel_power["stage_code"].isin(STAGE_ORDER)]
+    data = data.sort_values("stage_code", key=lambda s: s.map(STAGE_ORDER.index))
     fig = make_subplots(rows=1, cols=len(BANDS), subplot_titles=BANDS, horizontal_spacing=0.05)
     for col, band in enumerate(BANDS, start=1):
         fig.add_trace(go.Bar(
@@ -156,11 +157,13 @@ def stage_band_heatmap(rel_power: pd.DataFrame, channel: str) -> go.Figure:
     Color: z-score de la potencia relativa media dentro de cada banda (columna),
     para que bandas de distinta magnitud sean comparables. Texto: valor real.
     """
-    data = (rel_power[(rel_power["channel"] == channel) & rel_power["stage_code"].isin(STAGE_ORDER)]
-            .set_index("stage_code").loc[STAGE_ORDER, BANDS])
-    z = (data - data.mean()) / data.std(ddof=0)
+    data = rel_power[(rel_power["channel"] == channel)].set_index("stage_code")
+    stages = [s for s in STAGE_ORDER if s in data.index]  # el dashboard puede filtrar etapas
+    data = data.loc[stages, BANDS]
+    spread = data.std(ddof=0).replace(0, np.nan)  # con una sola etapa no hay contraste: z = 0
+    z = ((data - data.mean()) / spread).fillna(0)
     fig = go.Figure(go.Heatmap(
-        z=z.values, x=BANDS, y=STAGE_ORDER, colorscale=DIVERGING, zmid=0,
+        z=z.values, x=BANDS, y=stages, colorscale=DIVERGING, zmid=0,
         text=data.values, texttemplate="%{text:.3f}", textfont=dict(color=INK, size=12),
         xgap=2, ygap=2,
         colorbar=dict(title=dict(text="z (por banda)", side="right"), thickness=12, outlinewidth=0),
