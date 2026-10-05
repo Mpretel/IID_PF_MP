@@ -1,0 +1,17 @@
+# Núcleo numérico y tablas
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+pyarrow>=15          # Parquet para tablas intermedias
+
+# EEG
+mne>=1.8             # lectura EDF, filtrado, anotaciones
+mne-bids>=0.16       # organización BIDS
+antropy>=0.1.6       # Sample Entropy y Spectral Entropy
+
+# Metadatos de sujetos (SC-subjects.xls de PhysioNet es formato .xls)
+xlrd>=2.0
+
+# Visualización y dashboard
+plotly>=5.20
+streamlit>=1.35
