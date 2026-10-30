@@ -12,6 +12,9 @@ antropy>=0.1.6       # Sample Entropy y Spectral Entropy
 # Metadatos de sujetos (SC-subjects.xls de PhysioNet es formato .xls)
 xlrd>=2.0
 
+# Detección de outliers multivariada
+scikit-learn>=1.3
+
 # Visualización y dashboard
 plotly>=5.20
 streamlit>=1.35

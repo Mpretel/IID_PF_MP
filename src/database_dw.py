@@ -166,8 +166,8 @@ def transform(data: pd.DataFrame, oltp_path: Path = config.OLTP_DB_PATH) -> dict
     conn.close()
     dim_sleep_stage = _with_key(stages, "stage_key", ["stage_order", "original_description"])
 
-    # Hechos: outliers estadísticos sobre todo el conjunto (dependen de la distribución).
-    facts = quality.flag_statistical_outliers(data, group_cols=["channel", "stage"])
+    # Hechos: outliers estadísticos dentro de cada noche (dependen de la distribución).
+    facts = quality.flag_statistical_outliers(data, group_cols=["recording_id", "channel", "stage"])
     sleep_onset = (facts[facts["stage"].isin(["N1", "N2", "N3", "REM"])]
                    .groupby("recording_id")["start_sec"].min().rename("sleep_onset_sec"))
     facts = (facts

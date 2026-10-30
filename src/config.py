@@ -120,7 +120,11 @@ SAMPEN_ORDER = 2           # m; tolerancia r = 0.2 * SD (default de antropy)
 # ---------------------------------------------------------------------------
 # Control de calidad (flags de artefacto, NO eliminación)
 # ---------------------------------------------------------------------------
-ARTIFACT_MAX_PTP_UV = 500.0    # amplitud pico a pico excesiva
-ARTIFACT_MIN_STD_UV = 0.5      # señal plana / electrodo desconectado
+ARTIFACT_MIN_CLIPPED_SAMPLES = 10    # muestras en el límite físico del EDF por epoch (0.1 s): saturación
+ARTIFACT_MIN_STD_UV = 0.5            # señal plana / electrodo desconectado
+
+# Diagnóstico de outliers (notebook, sección de outliers). No modifica ninguna tabla.
+OUTLIER_TOP_FRACTION = 0.01    # cada detector multivariado marca la misma proporción de filas
+OUTLIER_MIN_VOTES = 4          # detectores (de 5) que deben coincidir para el consenso
 
 RANDOM_SEED = 42

@@ -55,6 +55,7 @@ flowchart TD
 │   ├── preprocessing.py  lectura EDF, validación, epochs, filtrado
 │   ├── features.py       potencias de banda, entropías, RMS, pico a pico
 │   ├── quality.py        artefactos, outliers, datos faltantes
+│   ├── outliers.py       diagnóstico de outliers (reglas y detectores multivariados)
 │   ├── pipeline.py       orquestación del Transform con caché
 │   ├── database_oltp.py  base transaccional 3NF
 │   ├── database_dw.py    ETL al Data Warehouse

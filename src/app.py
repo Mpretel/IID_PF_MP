@@ -56,7 +56,7 @@ chosen_recordings = st.sidebar.multiselect("Noche / registro", recordings, defau
 channel = st.sidebar.radio("Canal", sorted(obs["channel"].unique()))
 chosen_stages = st.sidebar.multiselect("Etapas de sueño", plots.STAGE_ORDER, default=plots.STAGE_ORDER)
 include_artifacts = st.sidebar.checkbox("Incluir epochs marcados como artefacto", value=False)
-st.sidebar.caption(f"Umbral de artefacto: pico a pico > {config.ARTIFACT_MAX_PTP_UV:.0f} µV, "
+st.sidebar.caption(f"Artefactos: ≥ {config.ARTIFACT_MIN_CLIPPED_SAMPLES} muestras saturadas, "
                    f"señal plana (SD < {config.ARTIFACT_MIN_STD_UV} µV) o valores no finitos.")
 
 base = obs[obs["recording_id"].isin(chosen_recordings) & (obs["channel"] == channel)]

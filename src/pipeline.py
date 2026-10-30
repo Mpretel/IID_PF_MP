@@ -18,6 +18,7 @@ import platform
 from importlib.metadata import version
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from src import config, features, preprocessing, quality
@@ -33,9 +34,10 @@ MISSING_REPORT_PATH = config.PROCESSED_DIR / "missing_report.csv"
 ENVIRONMENT_PATH = config.PROCESSED_DIR / "environment.json"
 
 # Incrementar cuando cambie el código de cálculo (no solo parámetros) para invalidar el caché.
-TRANSFORM_CODE_VERSION = 3
+TRANSFORM_CODE_VERSION = 4
 
-TRACKED_PACKAGES = ["numpy", "pandas", "scipy", "mne", "mne-bids", "antropy", "pyarrow", "plotly", "streamlit"]
+TRACKED_PACKAGES = ["numpy", "pandas", "scipy", "mne", "mne-bids", "antropy", "pyarrow", "plotly", "streamlit",
+                    "scikit-learn"]
 
 
 def processing_params() -> dict:
@@ -51,7 +53,7 @@ def processing_params() -> dict:
         "bands": config.FREQ_BANDS,
         "welch": [config.WELCH_WINDOW_S, config.WELCH_OVERLAP],
         "sampen_order": config.SAMPEN_ORDER,
-        "artifact": [config.ARTIFACT_MAX_PTP_UV, config.ARTIFACT_MIN_STD_UV],
+        "artifact": [config.ARTIFACT_MIN_CLIPPED_SAMPLES, config.ARTIFACT_MIN_STD_UV],
     }
 
 
@@ -79,6 +81,18 @@ def _load_cache(recording_id: str) -> tuple[pd.DataFrame, pd.DataFrame, dict] | 
     return pd.read_parquet(paths["epochs"]), pd.read_parquet(paths["features"]), meta
 
 
+def _clipped_counts(raw, psg_path: Path, start_secs: np.ndarray) -> np.ndarray:
+    """Muestras en el límite físico del EDF por (epoch, canal), sobre la señal sin filtrar."""
+    limits = preprocessing.read_edf_header(psg_path)[1].set_index("label")
+    data = preprocessing.extract_epoch_array(raw, start_secs)
+    counts = []
+    for index, channel in enumerate(raw.ch_names):
+        low, high = float(limits.loc[channel, "physical_min"]), float(limits.loc[channel, "physical_max"])
+        step = (high - low) / (float(limits.loc[channel, "digital_max"]) - float(limits.loc[channel, "digital_min"]))
+        counts.append(quality.count_clipped_samples(data[:, index], low, high, step))
+    return np.stack(counts, axis=1)
+
+
 def process_recording(recording_id: str, psg_path: Path, hyp_path: Path, force: bool = False
                       ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Procesa un registro completo. Devuelve (epochs, features, metadata del registro)."""
@@ -94,13 +108,15 @@ def process_recording(recording_id: str, psg_path: Path, hyp_path: Path, force: 
     epochs = preprocessing.mark_analysis_window(epochs, info["start_datetime"])
     usable = epochs[epochs["in_analysis_window"] & epochs["has_signal"]]
 
-    raw = preprocessing.crop_and_filter(preprocessing.load_eeg(psg_path, hyp_path), epochs)
+    raw = preprocessing.load_eeg(psg_path, hyp_path)
+    n_clipped = _clipped_counts(raw, psg_path, usable["start_sec"].to_numpy())
+    raw = preprocessing.crop_and_filter(raw, epochs)
     sfreq, channels = raw.info["sfreq"], list(raw.ch_names)
     data = preprocessing.extract_epoch_array(raw, usable["start_sec"].to_numpy())
     del raw
 
     table = features.compute_features(data, sfreq, channels, usable["epoch_number"].to_numpy())
-    is_artifact, reason = quality.flag_artifacts(data)
+    is_artifact, reason = quality.flag_artifacts(data, n_clipped)
     table["is_artifact"] = is_artifact.reshape(-1)
     table["artifact_reason"] = reason.reshape(-1)
     del data
@@ -136,7 +152,7 @@ def build_tidy_table(epochs: pd.DataFrame, feats: pd.DataFrame, recordings: pd.D
             .merge(recordings[["recording_id", "subject", "night"]], on="recording_id", how="left",
                    validate="many_to_one")
             .rename(columns={"subject": "subject_id", "start_sec": "start_time_sec", "stage": "sleep_stage"}))
-    tidy = quality.flag_statistical_outliers(tidy, group_cols=["channel", "sleep_stage"])
+    tidy = quality.flag_statistical_outliers(tidy, group_cols=["recording_id", "channel", "sleep_stage"])
     key = ["subject_id", "recording_id", "night", "epoch_number", "start_time_sec",
            "sleep_stage", "stage_original", "channel"]
     flags = ["is_artifact", "artifact_reason", "is_stat_outlier", "outlier_features"]

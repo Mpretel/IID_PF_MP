@@ -2,7 +2,7 @@
 
 Distinción metodológica central:
   - ARTEFACTO DE SEÑAL: el registro no refleja actividad cerebral (electrodo
-    suelto -> señal plana, saturación/movimiento -> amplitud imposible,
+    suelto -> señal plana, saturación del conversor -> señal recortada,
     valores no finitos). Se detecta con criterios *físicos* sobre la señal y se
     marca con `is_artifact` / `artifact_reason`. Las filas se CONSERVAN.
   - OUTLIER ESTADÍSTICO: valor extremo respecto de la distribución
@@ -19,7 +19,7 @@ from src import config
 
 ARTIFACT_NON_FINITE = "non_finite"
 ARTIFACT_FLAT = "flat_signal"
-ARTIFACT_HIGH_PTP = "excessive_amplitude"
+ARTIFACT_CLIPPED = "clipped"
 
 # Para potencias (fuertemente asimétricas a la derecha) la regla de Tukey se
 # aplica sobre log10; en escala lineal casi toda la cola superior sería "outlier".
@@ -29,15 +29,18 @@ IQR_FEATURES = ["delta_abs", "total_power", "delta_rel", "alpha_rel",
 IQR_FACTOR = 1.5
 
 
-def flag_artifacts(epochs_uv: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def flag_artifacts(epochs_uv: np.ndarray, n_clipped: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Marca artefactos por (epoch, canal) a partir de la señal filtrada en µV.
+
+    `n_clipped` son las muestras saturadas de cada (epoch, canal), contadas sobre
+    la señal sin filtrar (ver count_clipped_samples).
 
     Criterios (umbrales en config):
       - non_finite: algún valor NaN/inf;
       - flat_signal: desvío estándar < ARTIFACT_MIN_STD_UV (electrodo desconectado);
-      - excessive_amplitude: pico a pico > ARTIFACT_MAX_PTP_UV (no fisiológico
-        en EEG de superficie; por encima del máximo observado en los datos,
-        ~435 µV, que corresponde a ondas lentas de N3 en Fpz-Cz).
+      - clipped: al menos ARTIFACT_MIN_CLIPPED_SAMPLES muestras en el límite
+        físico del EDF. Un umbral de pico a pico no sirve: el rango físico
+        (como máximo ±248 µV) recorta la señal antes de alcanzarlo.
 
     Devuelve (is_artifact bool, artifact_reason str) de forma (n_epochs, n_canales).
     Si se cumplen varios criterios, los motivos se concatenan con ';'.
@@ -47,7 +50,7 @@ def flag_artifacts(epochs_uv: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         checks = {
             ARTIFACT_NON_FINITE: ~finite,
             ARTIFACT_FLAT: finite & (np.std(epochs_uv, axis=-1) < config.ARTIFACT_MIN_STD_UV),
-            ARTIFACT_HIGH_PTP: finite & (np.ptp(epochs_uv, axis=-1) > config.ARTIFACT_MAX_PTP_UV),
+            ARTIFACT_CLIPPED: finite & (n_clipped >= config.ARTIFACT_MIN_CLIPPED_SAMPLES),
         }
     reasons = np.full(finite.shape, "", dtype=object)
     for name, mask in checks.items():
@@ -57,12 +60,15 @@ def flag_artifacts(epochs_uv: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return is_artifact, reasons
 
 
-def flag_statistical_outliers(features: pd.DataFrame, group_cols: list[str] = ["channel", "stage"]) -> pd.DataFrame:
+def flag_statistical_outliers(features: pd.DataFrame,
+                              group_cols: list[str] = ["recording_id", "channel", "stage"]) -> pd.DataFrame:
     """Agrega `outlier_features`: lista de features fuera de [Q1 - 1.5·IQR, Q3 + 1.5·IQR].
 
-    Se calcula dentro de cada grupo canal × etapa, porque las distribuciones
-    difieren legítimamente entre etapas (N3 tiene más delta que REM por
-    definición). Excluye artefactos del cálculo de cuartiles. Solo informativo.
+    Se calcula dentro de cada grupo registro × canal × etapa: las distribuciones
+    difieren legítimamente entre etapas (N3 tiene más delta que REM por definición)
+    y entre noches. Con una referencia entre registros, la regla marca personas o
+    ganancias del equipo, no epochs raros. Excluye artefactos del cálculo de
+    cuartiles. Solo informativo.
     """
     flags = pd.DataFrame(False, index=features.index, columns=IQR_FEATURES)
     clean = ~features["is_artifact"]
@@ -82,6 +88,29 @@ def flag_statistical_outliers(features: pd.DataFrame, group_cols: list[str] = ["
     out["outlier_features"] = flags.apply(lambda row: ";".join(flags.columns[row]) or None, axis=1)
     out["is_stat_outlier"] = out["outlier_features"].notna()
     return out
+
+
+def count_clipped_samples(epochs_uv: np.ndarray, low_uv: float, high_uv: float, tolerance_uv: float) -> np.ndarray:
+    """Cuenta, por epoch, las muestras en el límite físico del EDF (saturación del conversor).
+
+    `epochs_uv` debe ser la señal SIN filtrar de un canal, (n_epochs, n_muestras): el filtro
+    redondea las mesetas. `tolerance_uv` es un paso de cuantización.
+    """
+    return ((epochs_uv >= high_uv - tolerance_uv) | (epochs_uv <= low_uv + tolerance_uv)).sum(axis=-1)
+
+
+def data_profile(table: pd.DataFrame) -> pd.DataFrame:
+    """Perfil por columna numérica: nulos, infinitos, ceros, negativos y rango."""
+    numeric = table.select_dtypes("number")
+    return pd.DataFrame({
+        "nulos": numeric.isna().sum(),
+        "infinitos": np.isinf(numeric).sum(),
+        "ceros": (numeric == 0).sum(),
+        "negativos": (numeric < 0).sum(),
+        "mínimo": numeric.min(),
+        "mediana": numeric.median(),
+        "máximo": numeric.max(),
+    })
 
 
 def missing_data_report(epochs: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:

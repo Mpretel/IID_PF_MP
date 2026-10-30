@@ -258,11 +258,11 @@ def temporal_evolution(evolution: pd.DataFrame, metric: str, channel: str,
                   height=380)
 
 
-def amplitude_vs_threshold(obs: pd.DataFrame) -> go.Figure:
-    """¿Dónde caen los valores extremos respecto del umbral de artefacto?
+def amplitude_by_stage(obs: pd.DataFrame) -> go.Figure:
+    """¿Dónde caen los valores extremos de amplitud?
 
-    Box plot de pico a pico por etapa y canal con el umbral configurado: muestra
-    que los outliers estadísticos (puntos) quedan muy por debajo del umbral físico.
+    Box plot de pico a pico por etapa y canal: las amplitudes más altas de N3 son
+    ondas lentas, no artefactos.
     """
     data = _scored(obs)
     fig = go.Figure()
@@ -272,9 +272,22 @@ def amplitude_vs_threshold(obs: pd.DataFrame) -> go.Figure:
             x=part["channel"], y=part["peak_to_peak"], name=stage, marker=dict(color=STAGE_COLORS[stage], size=4),
             line=dict(width=1.2), boxpoints="outliers",
             hovertemplate=f"{stage} · %{{x}}<br>%{{y:.0f}} µV<extra></extra>"))
-    fig.add_hline(y=config.ARTIFACT_MAX_PTP_UV, line=dict(color="#d03b3b", width=1.5),
-                  annotation_text=f"Umbral de artefacto: {config.ARTIFACT_MAX_PTP_UV:.0f} µV",
-                  annotation_position="top left", annotation_font_color=INK_SECONDARY)
     fig.update_layout(boxmode="group")
     fig.update_yaxes(title=METRIC_LABELS["peak_to_peak"], rangemode="tozero")
-    return _style(fig, "Amplitud pico a pico por etapa y umbral de artefacto", height=420)
+    return _style(fig, "Amplitud pico a pico por etapa", height=420)
+
+
+def outlier_rate_by_recording(rates: pd.DataFrame) -> go.Figure:
+    """¿Los outliers son epochs raros o registros distintos?
+
+    `rates`: índice recording_id, columnas "Entre registros" y "Dentro del registro" (%).
+    """
+    data = rates.sort_values("Entre registros", ascending=False)
+    fig = go.Figure()
+    for column, color in [("Entre registros", INK_MUTED), ("Dentro del registro", "#2a78d6")]:
+        fig.add_trace(go.Bar(x=data.index, y=data[column], name=column, marker_color=color,
+                             hovertemplate="%{x}<br>%{y:.1f} % de las filas<extra>" + column + "</extra>"))
+    fig.update_layout(barmode="group", bargap=0.25, bargroupgap=0.05)
+    fig.update_xaxes(title="Registro", tickangle=-45)
+    fig.update_yaxes(title="Filas marcadas por Tukey [%]", rangemode="tozero")
+    return _style(fig, "Outliers de Tukey por registro según el grupo de referencia", height=420)
