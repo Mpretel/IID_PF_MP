@@ -21,12 +21,14 @@ from src import config
 
 _FROM_STAR = """
 FROM fact_eeg_epoch f
-JOIN dim_subject     su ON su.subject_key   = f.subject_key
 JOIN dim_recording   r  ON r.recording_key  = f.recording_key
 JOIN dim_channel     c  ON c.channel_key    = f.channel_key
 JOIN dim_sleep_stage st ON st.stage_key     = f.stage_key
 """
 _ANALYSIS_FILTER = "WHERE st.is_scored = 1 AND (:include_artifacts = 1 OR f.is_artifact = 0)"
+_MEASURES = """COUNT(*) AS n, COUNT(DISTINCT r.subject_id) AS n_subjects,
+               AVG(f.sample_entropy) AS sample_entropy, AVG(f.spectral_entropy) AS spectral_entropy,
+               AVG(f.delta_rel) AS delta_rel, AVG(f.sigma_rel) AS sigma_rel"""
 
 QUERIES: dict[str, str] = {
     # 1. Sample Entropy promedio por etapa (y canal: los canales no se mezclan).
@@ -68,12 +70,12 @@ QUERIES: dict[str, str] = {
 
     # 5. Comparación entre sujetos.
     "subject_comparison": f"""
-        SELECT su.subject_id, su.age, su.sex, st.stage_code, c.short_name AS channel, COUNT(*) AS n,
+        SELECT r.subject_id, r.age, r.sex, st.stage_code, c.short_name AS channel, COUNT(*) AS n,
                AVG(f.sample_entropy) AS sample_entropy, AVG(f.spectral_entropy) AS spectral_entropy,
                AVG(f.delta_rel) AS delta_rel
         {_FROM_STAR} {_ANALYSIS_FILTER}
-        GROUP BY su.subject_id, su.age, su.sex, st.stage_code, st.stage_order, c.short_name
-        ORDER BY su.subject_id, st.stage_order, channel""",
+        GROUP BY r.subject_id, r.age, r.sex, st.stage_code, st.stage_order, c.short_name
+        ORDER BY r.subject_id, st.stage_order, channel""",
 
     # 6. Cantidad de epochs por etapa (un epoch tiene una fila por canal: se cuentan
     #    pares registro-epoch distintos). Incluye etapas no puntuadas.
@@ -112,11 +114,52 @@ QUERIES: dict[str, str] = {
         {_FROM_STAR} {_ANALYSIS_FILTER}
         GROUP BY r.recording_id, c.short_name, hour_bin
         ORDER BY r.recording_id, channel, hour_bin""",
+
+    # 9. Cubo: una celda por etapa × grupo etario × canal.
+    "cube": f"""
+        SELECT st.stage_code, r.age_group, c.short_name AS channel,
+               {_MEASURES}
+        {_FROM_STAR} {_ANALYSIS_FILTER}
+        GROUP BY st.stage_code, st.stage_order, r.age_group, c.short_name
+        ORDER BY st.stage_order, MIN(r.age), channel""",
+
+    # 10. Slice: el cubo con una dimensión fija (etapa = N2). Responde la pregunta 2.
+    "slice_n2": f"""
+        SELECT r.age_group, c.short_name AS channel,
+               {_MEASURES}
+        {_FROM_STAR} {_ANALYSIS_FILTER} AND st.stage_code = 'N2'
+        GROUP BY r.age_group, c.short_name
+        ORDER BY MIN(r.age), channel""",
+
+    # 11. Dice: un subcubo, con varias dimensiones restringidas.
+    "dice_deep_sleep_extremes": f"""
+        SELECT st.stage_code, r.age_group, c.short_name AS channel,
+               {_MEASURES}
+        {_FROM_STAR} {_ANALYSIS_FILTER}
+          AND st.stage_code IN ('N2', 'N3') AND r.age_group IN ('<40', '65+')
+        GROUP BY st.stage_code, st.stage_order, r.age_group, c.short_name
+        ORDER BY st.stage_order, MIN(r.age), channel""",
+
+    # 12. Roll-up: se agrega sobre grupo etario y canal, y queda solo la etapa. Responde la pregunta 1.
+    "rollup_stage": f"""
+        SELECT st.stage_code,
+               {_MEASURES}
+        {_FROM_STAR} {_ANALYSIS_FILTER}
+        GROUP BY st.stage_code, st.stage_order
+        ORDER BY st.stage_order""",
+
+    # 13. Drill-down: del grupo etario al sujeto, dentro del slice de N2.
+    "drilldown_n2_subject": f"""
+        SELECT r.age_group, r.subject_id, r.age, r.sex, c.short_name AS channel,
+               {_MEASURES}
+        {_FROM_STAR} {_ANALYSIS_FILTER} AND st.stage_code = 'N2'
+        GROUP BY r.age_group, r.subject_id, r.age, r.sex, c.short_name
+        ORDER BY r.age, channel""",
 }
 
 # Datos a nivel fila para gráficos de distribución, hipnograma y dashboard.
 OBSERVATIONS_SQL = f"""
-SELECT su.subject_id, r.recording_id, r.night, c.short_name AS channel,
+SELECT r.age_group, r.subject_id, r.age, r.sex, r.recording_id, r.night, c.short_name AS channel,
        f.epoch_number, f.start_sec, f.hours_since_sleep_onset,
        st.stage_code, st.stage_order, st.is_scored,
        f.delta_abs, f.theta_abs, f.alpha_abs, f.sigma_abs, f.beta_abs,

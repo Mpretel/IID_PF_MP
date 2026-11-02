@@ -119,8 +119,9 @@ def validate_dw(oltp_path=config.OLTP_DB_PATH, dw_path=config.DW_DB_PATH) -> lis
             "SELECT COUNT(*) FROM (SELECT DISTINCT recording_key, epoch_number, channel_key FROM fact_eeg_epoch)"
         ).fetchone()[0]
         subject_mismatch = conn.execute(
-            "SELECT COUNT(*) FROM (SELECT recording_key FROM fact_eeg_epoch "
-            "GROUP BY recording_key HAVING COUNT(DISTINCT subject_key) > 1)").fetchone()[0]
+            "SELECT COUNT(*) FROM (SELECT subject_id FROM dim_recording "
+            "GROUP BY subject_id HAVING COUNT(DISTINCT age) > 1 OR COUNT(DISTINCT sex) > 1 "
+            "OR COUNT(DISTINCT age_group) > 1)").fetchone()[0]
     conn.close()
 
     not_reproducible = [
@@ -133,8 +134,8 @@ def validate_dw(oltp_path=config.OLTP_DB_PATH, dw_path=config.DW_DB_PATH) -> lis
                f"fact_eeg_epoch tiene {n_fact} filas y eeg_feature {n_oltp}"),
         _check(n_grain == n_fact, "Grano respetado: (registro, epoch, canal) único en la tabla de hechos",
                f"{n_fact - n_grain} filas repiten el grano (registro, epoch, canal)"),
-        _check(subject_mismatch == 0, "Cada registro pertenece a un único sujeto",
-               f"{subject_mismatch} registros asociados a más de un sujeto"),
+        _check(subject_mismatch == 0, "Jerarquía de dim_recording coherente: cada sujeto tiene una edad, un sexo y un grupo",
+               f"{subject_mismatch} sujetos con atributos distintos entre registros"),
         _check(not not_reproducible, f"{len(queries.QUERIES)} consultas analíticas reproducibles",
                f"Consultas con resultados distintos entre ejecuciones: {not_reproducible}"),
     ]

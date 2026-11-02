@@ -7,9 +7,10 @@ y dashboard Streamlit.
 
 *Trabajo Práctico Final — Introducción a la Ingeniería de Datos.*
 
-## Pregunta de investigación
+## Preguntas de investigación
 
-> ¿Cómo varían la complejidad y la actividad espectral del EEG entre las distintas etapas del sueño?
+> 1. ¿Cómo varían la complejidad y la actividad espectral del EEG entre las distintas etapas del sueño?
+> 2. ¿Cómo cambia ese perfil con la edad?
 
 El foco del trabajo es el **pipeline de datos**; la pregunta neurocientífica es el caso de estudio. Los resultados son
 descriptivos (sin inferencia estadística).
@@ -20,10 +21,10 @@ descriptivos (sin inferencia estadística).
 [10.13026/C2X676](https://doi.org/10.13026/C2X676)), subconjunto *sleep-cassette*: polisomnografías de personas
 sanas con hipnogramas puntuados por expertos. Se usan los canales EEG **Fpz-Cz** y **Pz-Oz** (100 Hz).
 
-Por defecto se procesan **10 sujetos × 2 noches**, estratificados por sexo y edad: 5 mujeres y 5 hombres de 27 a
-90 años (`SUBJECT_IDS` en `src/config.py`). Los primeros 10 IDs del dataset son todas mujeres de 25–34 años, por eso
-no se usan. Con `SUBJECT_IDS = None` se toman los primeros `N_SUBJECTS` sujetos. Los archivos se descargan
-programáticamente y se verifican contra los SHA256 oficiales.
+Por defecto se procesan **18 sujetos × 2 noches**, estratificados por sexo y edad: 3 mujeres y 3 hombres en cada
+grupo etario (<40, 40-64 y 65+), de 26 a 101 años (`SUBJECT_IDS` en `src/config.py`). Los primeros 10 IDs del dataset
+son todas mujeres de 25–34 años, por eso no se usan. Con `SUBJECT_IDS = None` se toman los primeros `N_SUBJECTS`
+sujetos. Los archivos se descargan programáticamente y se verifican contra los SHA256 oficiales.
 
 ## Arquitectura
 
@@ -97,7 +98,7 @@ SQLite se usa mediante el módulo `sqlite3` de la biblioteca estándar.
 Abrir `notebooks/TP_final.ipynb` (VS Code o Jupyter) y ejecutar todas las celdas. El notebook descarga los datos,
 genera BIDS, procesa los registros, construye ambas bases, ejecuta las consultas y muestra el EDA.
 
-- Primera ejecución con 10 sujetos × 2 noches: ~20–30 min, casi todo en el cálculo de Sample Entropy. Las
+- Primera ejecución con 18 sujetos × 2 noches: ~40–45 min y ~3,5 GB de disco, casi todo en el cálculo de Sample Entropy. Las
   ejecuciones siguientes reutilizan las descargas y el caché por registro y tardan segundos.
 - `QUICK_RUN = True` en la celda de configuración procesa 2 sujetos para una prueba rápida.
 
@@ -167,14 +168,16 @@ subject 1─N recording 1─N epoch N─1 hypnogram_label N─1 sleep_stage
 
 ## Data Warehouse (`sleep_dw.sqlite`)
 
-Esquema estrella con `fact_eeg_epoch` y las dimensiones `dim_subject`, `dim_recording`, `dim_channel` y
-`dim_sleep_stage`, con surrogate keys.
+Esquema estrella con `fact_eeg_epoch` y 3 dimensiones con surrogate keys: `dim_recording`, `dim_channel` y
+`dim_sleep_stage`. Sujeto y grupo etario son una jerarquía dentro de `dim_recording`, porque cada registro pertenece a
+un único sujeto. Las dimensiones forman el cubo etapa × grupo etario × canal (5 × 3 × 2 = 30 celdas).
 
 **Grano**: una observación de features EEG correspondiente a un epoch de 30 segundos, un canal, un sujeto y un
 registro.
 
 El ETL extrae desde el OLTP y materializa métricas derivadas, tiempo desde el inicio del sueño y flags de outlier.
-Las 8 consultas analíticas están en `src/queries.py`.
+Las 13 consultas analíticas están en `src/queries.py`, incluidas las operaciones del cubo: slice, dice, roll-up y
+drill-down.
 
 ## Reproducibilidad
 
@@ -196,10 +199,12 @@ políticas de retención. No es necesaria para este TP.
 
 ## Declaración de uso de IA
 
-| Herramienta | Uso |
-|---|---|
-| OpenAI Codex | Diseño de la arquitectura del proyecto, generación y revisión de código Python y documentación técnica |
-| Claude Code — modelo Claude Opus 5.5 (versión de la herramienta: TODO) | Diseño de la arquitectura del proyecto, generación y revisión de código Python y documentación técnica |
+- "Claude Code (Claude Opus 5.5)" para "diseñar la arquitectura del pipeline ETL y los modelos OLTP y dimensional".
+- "Claude Code (Claude Opus 5.5)" para "generar y revisar el código Python y SQL".
+- "Claude Code (Claude Opus 5.5)" para "redactar y revisar las justificaciones metodológicas y la documentación".
+- "Claude Code (Claude Opus 5.5)" para "diseñar el dashboard, los gráficos y las diapositivas".
+
+Las instrucciones dadas a la IA están en `notebooks/TP_final.ipynb`, antes de cada sección.
 
 ## Licencia y citas
 

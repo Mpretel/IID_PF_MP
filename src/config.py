@@ -43,14 +43,17 @@ SUBJECTS_METADATA_FILENAME = "SC-subjects.xls"
 #   - N_SUBJECTS: se toman los primeros N sujetos disponibles (orden por ID).
 #   - SUBJECT_IDS: lista explícita de IDs (tiene prioridad sobre N_SUBJECTS).
 #   - NIGHTS: noches a incluir (algunos sujetos tienen solo una).
-N_SUBJECTS = 10
-# Muestra estratificada por sexo y edad (los primeros 10 IDs son todas mujeres de
-# 25-34 años). Regla: para cada sexo, entre los sujetos con 2 noches, el más
-# cercano a los cuantiles 10/30/50/70/90 % de edad.
-#   F: 5 (28 años), 20 (51), 22 (56), 40 (67), 65 (88)
-#   M: 14 (27), 38 (51), 33 (60), 50 (71), 76 (90)
+N_SUBJECTS = 18
+# Muestra estratificada: 3 mujeres y 3 hombres en cada grupo etario (los primeros
+# 10 IDs son todas mujeres de 25-34 años). Regla: 10 sujetos iniciales, los más
+# cercanos a los cuantiles 10/30/50/70/90 % de edad de cada sexo; los otros 8 se
+# agregan por grupo y sexo eligiendo la edad más alejada de las ya elegidas
+# (en empate, el ID más bajo). Siempre sujetos con 2 noches, y sin mirar sus señales.
+#   <40:   F 5 (28 años), 6 (31), 4 (34)      M 10 (26), 14 (27), 16 (32)
+#   40-64: F 20 (51), 24 (54), 22 (56)        M 38 (51), 31 (54), 33 (60)
+#   65+:   F 40 (67), 65 (88), 61 (101)       M 50 (71), 76 (90), 73 (97)
 # Con SUBJECT_IDS = None se usan los primeros N_SUBJECTS sujetos por ID.
-SUBJECT_IDS: list[int] | None = [5, 14, 20, 22, 33, 38, 40, 50, 65, 76]
+SUBJECT_IDS: list[int] | None = [4, 5, 6, 10, 14, 16, 20, 22, 24, 31, 33, 38, 40, 50, 61, 65, 73, 76]
 NIGHTS: tuple[int, ...] = (1, 2)
 
 # Validación de tamaño mínimo de descarga (bytes). Un PSG de SC pesa ~40-50 MB

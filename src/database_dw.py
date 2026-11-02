@@ -5,11 +5,14 @@
 Grano de FACT_EEG_EPOCH: una observación de features EEG correspondiente a
 un epoch de 30 segundos, un canal, un sujeto y un registro.
 
-                      dim_subject
-                           │
         dim_recording ── fact_eeg_epoch ── dim_channel
-                           │
-                    dim_sleep_stage
+                               │
+                        dim_sleep_stage
+
+Tres dimensiones, que forman el cubo etapa × grupo etario × canal. El sujeto no es
+una dimensión aparte: cada registro pertenece a un único sujeto, así que sujeto y
+grupo etario son una jerarquía dentro de dim_recording
+(grupo etario -> sujeto -> registro).
 
 A diferencia del OLTP, acá la redundancia es deliberada: se materializan
 potencias total/relativas, tiempos y flags de outlier para que las consultas
@@ -31,17 +34,13 @@ from src.features import FEATURE_COLUMNS
 logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
-CREATE TABLE dim_subject (
-    subject_key   INTEGER PRIMARY KEY,          -- surrogate key
-    subject_id    INTEGER NOT NULL UNIQUE,      -- clave natural (Sleep-EDF)
-    age           INTEGER NOT NULL,
-    sex           TEXT    NOT NULL,
-    age_group     TEXT    NOT NULL
-);
-
 CREATE TABLE dim_recording (
-    recording_key         INTEGER PRIMARY KEY,
-    recording_id          TEXT    NOT NULL UNIQUE,
+    recording_key         INTEGER PRIMARY KEY,    -- surrogate key
+    recording_id          TEXT    NOT NULL UNIQUE, -- clave natural (Sleep-EDF)
+    age_group             TEXT    NOT NULL,       -- jerarquía: grupo etario -> sujeto -> registro
+    subject_id            INTEGER NOT NULL,
+    age                   INTEGER NOT NULL,
+    sex                   TEXT    NOT NULL,
     night                 INTEGER NOT NULL,
     start_datetime        TEXT    NOT NULL,
     lights_off            TEXT,
@@ -68,7 +67,6 @@ CREATE TABLE dim_sleep_stage (
 
 CREATE TABLE fact_eeg_epoch (
     fact_id                 INTEGER PRIMARY KEY,
-    subject_key             INTEGER NOT NULL REFERENCES dim_subject (subject_key),
     recording_key           INTEGER NOT NULL REFERENCES dim_recording (recording_key),
     channel_key             INTEGER NOT NULL REFERENCES dim_channel (channel_key),
     stage_key               INTEGER NOT NULL REFERENCES dim_sleep_stage (stage_key),
@@ -89,7 +87,7 @@ CREATE TABLE fact_eeg_epoch (
     UNIQUE (recording_key, epoch_number, channel_key)
 );
 
-CREATE INDEX idx_fact_subject   ON fact_eeg_epoch (subject_key);
+CREATE INDEX idx_fact_recording ON fact_eeg_epoch (recording_key);
 CREATE INDEX idx_fact_channel   ON fact_eeg_epoch (channel_key);
 CREATE INDEX idx_fact_stage     ON fact_eeg_epoch (stage_key);
 """
@@ -112,8 +110,8 @@ JOIN recording r ON r.recording_id = e.recording_id
 JOIN subject   s ON s.subject_id = r.subject_id
 """
 
-AGE_BINS = [0, 40, 60, 80, 120]
-AGE_LABELS = ["<40", "40-59", "60-79", "80+"]
+AGE_BINS = [0, 40, 65, 120]
+AGE_LABELS = ["<40", "40-64", "65+"]
 
 
 def connect(path: Path = config.DW_DB_PATH) -> sqlite3.Connection:
@@ -139,14 +137,12 @@ def _with_key(df: pd.DataFrame, key: str, order_by: list[str]) -> pd.DataFrame:
 
 def transform(data: pd.DataFrame, oltp_path: Path = config.OLTP_DB_PATH) -> dict[str, pd.DataFrame]:
     """Construye dimensiones y hechos a partir de la extracción del OLTP."""
-    dim_subject = _with_key(
-        data[["subject_id", "age", "sex"]].drop_duplicates()
-        .assign(age_group=lambda d: pd.cut(d["age"], AGE_BINS, right=False, labels=AGE_LABELS).astype(str)),
-        "subject_key", ["subject_id"])
-
     rec = data.drop_duplicates("recording_id")
     dim_recording = _with_key(pd.DataFrame({
-        "recording_id": rec["recording_id"], "night": rec["night"], "start_datetime": rec["start_datetime"],
+        "recording_id": rec["recording_id"],
+        "age_group": pd.cut(rec["age"], AGE_BINS, right=False, labels=AGE_LABELS).astype(str),
+        "subject_id": rec["subject_id"], "age": rec["age"], "sex": rec["sex"],
+        "night": rec["night"], "start_datetime": rec["start_datetime"],
         "lights_off": rec["lights_off"], "sampling_frequency_hz": rec["sampling_frequency_hz"],
         "psg_duration_h": rec["psg_duration_s"] / 3600,
         "analyzed_duration_h": (rec["analysis_end_sec"] - rec["analysis_start_sec"]) / 3600,
@@ -172,7 +168,6 @@ def transform(data: pd.DataFrame, oltp_path: Path = config.OLTP_DB_PATH) -> dict
                    .groupby("recording_id")["start_sec"].min().rename("sleep_onset_sec"))
     facts = (facts
              .merge(sleep_onset, on="recording_id")
-             .merge(dim_subject[["subject_key", "subject_id"]], on="subject_id")
              .merge(dim_recording[["recording_key", "recording_id"]], on="recording_id")
              .merge(dim_channel[["channel_key", "channel_name"]], left_on="channel", right_on="channel_name")
              .merge(dim_sleep_stage[["stage_key", "original_description"]],
@@ -181,12 +176,12 @@ def transform(data: pd.DataFrame, oltp_path: Path = config.OLTP_DB_PATH) -> dict
         raise ValueError(f"El join con dimensiones cambió la cantidad de filas ({len(data)} -> {len(facts)}).")
     facts["hours_since_sleep_onset"] = (facts["start_sec"] - facts["sleep_onset_sec"]) / 3600
     facts[["is_artifact", "is_stat_outlier"]] = facts[["is_artifact", "is_stat_outlier"]].astype(int)
-    fact_cols = (["subject_key", "recording_key", "channel_key", "stage_key", "epoch_number", "start_sec",
+    fact_cols = (["recording_key", "channel_key", "stage_key", "epoch_number", "start_sec",
                   "hours_since_sleep_onset"] + FEATURE_COLUMNS
                  + ["is_artifact", "artifact_reason", "is_stat_outlier", "outlier_features"])
     fact = facts.sort_values(["recording_key", "epoch_number", "channel_key"])[fact_cols]
 
-    return {"dim_subject": dim_subject, "dim_recording": dim_recording, "dim_channel": dim_channel,
+    return {"dim_recording": dim_recording, "dim_channel": dim_channel,
             "dim_sleep_stage": dim_sleep_stage, "fact_eeg_epoch": fact}
 
 
@@ -196,7 +191,7 @@ def load(tables: dict[str, pd.DataFrame], path: Path = config.DW_DB_PATH) -> Non
     path.unlink(missing_ok=True)
     with connect(path) as conn:
         conn.executescript(SCHEMA_SQL)
-        for name in ["dim_subject", "dim_recording", "dim_channel", "dim_sleep_stage", "fact_eeg_epoch"]:
+        for name in ["dim_recording", "dim_channel", "dim_sleep_stage", "fact_eeg_epoch"]:
             _insert(conn, name, tables[name])
     conn.close()
 

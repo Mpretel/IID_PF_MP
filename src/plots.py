@@ -36,6 +36,7 @@ METRIC_LABELS = {
     "spectral_entropy": "Spectral Entropy (normalizada)",
     "delta_rel": "Potencia relativa delta",
     "alpha_rel": "Potencia relativa alfa",
+    "sigma_rel": "Potencia relativa sigma",
     "delta_abs": "Potencia absoluta delta [µV²]",
     "total_power": "Potencia total 0.5–30 Hz [µV²]",
     "peak_to_peak": "Amplitud pico a pico [µV]",
@@ -291,3 +292,72 @@ def outlier_rate_by_recording(rates: pd.DataFrame) -> go.Figure:
     fig.update_xaxes(title="Registro", tickangle=-45)
     fig.update_yaxes(title="Filas marcadas por Tukey [%]", rangemode="tozero")
     return _style(fig, "Outliers de Tukey por registro según el grupo de referencia", height=420)
+
+
+def sigma_vs_age(subjects: pd.DataFrame, metric: str = "sigma_rel", stage: str = "N2") -> go.Figure:
+    """¿Cambia la métrica con la edad? Un punto por sujeto y canal (consulta drilldown_n2_subject)."""
+    fig = go.Figure()
+    for channel, group in subjects.groupby("channel"):
+        fig.add_trace(go.Scatter(
+            x=group["age"], y=group[metric], mode="markers", name=channel, customdata=group["subject_id"],
+            marker=dict(size=11, color=CHANNEL_INK.get(channel, INK), line=dict(color=SURFACE, width=2)),
+            hovertemplate="Sujeto %{customdata}<br>%{x} años<br>%{y:.3f}<extra>" + channel + "</extra>"))
+    fig.update_xaxes(title="Edad [años]")
+    fig.update_yaxes(title=METRIC_LABELS.get(metric, metric), rangemode="tozero")
+    return _style(fig, f"{METRIC_LABELS.get(metric, metric)} en {stage} según la edad de cada sujeto", height=420)
+
+
+def cube_figure(cube: pd.DataFrame, metric: str = "sigma_rel", highlight: str = "N2") -> go.Figure:
+    """¿Cómo se organiza el almacén? El cubo etapa × grupo etario × canal, con valores reales.
+
+    Proyección isométrica dibujada en 2D: la cara frontal es el canal Fpz-Cz, la superior
+    y la lateral muestran la profundidad (Pz-Oz). Es un esquema del modelo, no un gráfico
+    para comparar valores: el corte `highlight` se resalta y el resto queda en gris.
+    """
+    stages = [s for s in STAGE_ORDER if s in set(cube["stage_code"])]
+    ages = sorted(cube["age_group"].unique(), key=["<40", "40-64", "65+"].index)
+    channels = sorted(cube["channel"].unique())
+    values = cube.set_index(["stage_code", "age_group", "channel"])[metric]
+    dx, dy = 0.55, 0.32                                  # desplazamiento por unidad de profundidad
+    base, accent, line = "#ecebe6", "#2a78d6", SURFACE
+    fig = go.Figure()
+
+    def cell(xs, ys, color, hover=None):
+        fig.add_trace(go.Scatter(x=xs + xs[:1], y=ys + ys[:1], mode="lines", fill="toself", fillcolor=color,
+                                 line=dict(color=line, width=2), hoverinfo="text" if hover else "skip",
+                                 text=hover, hoveron="fills", showlegend=False))
+
+    n_ages = len(ages)
+    for i, stage in enumerate(stages):                   # cara frontal: etapa × grupo etario
+        for j, age in enumerate(ages):
+            top = n_ages - j
+            value = values.get((stage, age, channels[0]), np.nan)
+            cell([i, i + 1, i + 1, i], [top - 1, top - 1, top, top], accent if stage == highlight else base,
+                 f"{stage} · {age} · {channels[0]}<br>{value:.3f}")
+            fig.add_annotation(x=i + 0.5, y=top - 0.5, text=f"{value:.3f}", showarrow=False,
+                               font=dict(size=12, color="white" if stage == highlight else INK_SECONDARY))
+    for i, stage in enumerate(stages):                   # cara superior: etapa × canal
+        for k in range(len(channels)):
+            x0, y0 = i + k * dx, n_ages + k * dy
+            cell([x0, x0 + 1, x0 + 1 + dx, x0 + dx], [y0, y0, y0 + dy, y0 + dy],
+                 _with_alpha(accent, 0.75) if stage == highlight else base)
+    for j in range(n_ages):                              # cara lateral: grupo etario × canal
+        for k in range(len(channels)):
+            x0, y0 = len(stages) + k * dx, n_ages - j + k * dy
+            cell([x0, x0 + dx, x0 + dx, x0], [y0 - 1, y0 - 1 + dy, y0 + dy, y0], "#dfded8")
+
+    for i, stage in enumerate(stages):
+        fig.add_annotation(x=i + 0.5, y=-0.28, text=f"<b>{stage}</b>" if stage == highlight else stage,
+                           showarrow=False, font=dict(size=13, color=INK if stage == highlight else INK_SECONDARY))
+    for j, age in enumerate(ages):
+        fig.add_annotation(x=-0.1, y=n_ages - j - 0.5, text=age, showarrow=False, xanchor="right",
+                           font=dict(size=13, color=INK_SECONDARY))
+    for k, channel in enumerate(channels):
+        fig.add_annotation(x=len(stages) + k * dx + dx + 0.08, y=n_ages + k * dy + dy / 2, text=channel,
+                           showarrow=False, xanchor="left", font=dict(size=12, color=INK_SECONDARY))
+    fig.add_annotation(x=len(stages) / 2, y=-0.68, text="Etapa", showarrow=False, font=dict(size=12, color=INK_MUTED))
+    fig.add_annotation(x=-0.9, y=n_ages / 2, text="Grupo etario", showarrow=False, textangle=-90,
+                       font=dict(size=12, color=INK_MUTED))
+    fig.update_xaxes(visible=False, range=[-1.2, len(stages) + 2.3])
+    fig.update_yaxes(visible=False, range=[-0.9, n_ages + 1.1], scaleanchor="x", scaleratio=1)
+    return _style(fig, f"Cubo etapa × grupo etario × canal: slice de {highlight}", height=460)

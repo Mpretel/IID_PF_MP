@@ -48,7 +48,9 @@ obs = load_data(config.DW_DB_PATH.stat().st_mtime)
 # Filtros (barra lateral)
 # ---------------------------------------------------------------------------
 st.sidebar.header("Filtros")
-subjects = sorted(obs["subject_id"].unique())
+age_groups = [g for g in ["<40", "40-64", "65+"] if g in set(obs["age_group"])]
+chosen_ages = st.sidebar.multiselect("Grupo etario", age_groups, default=age_groups)
+subjects = sorted(obs.loc[obs["age_group"].isin(chosen_ages), "subject_id"].unique())
 chosen_subjects = st.sidebar.multiselect("Sujeto", subjects, default=subjects,
                                          format_func=lambda s: f"Sujeto {s}")
 recordings = sorted(obs.loc[obs["subject_id"].isin(chosen_subjects), "recording_id"].unique())
@@ -67,9 +69,10 @@ data = base[base["stage_code"].isin(chosen_stages)]
 # ---------------------------------------------------------------------------
 # Encabezado e indicadores
 # ---------------------------------------------------------------------------
-st.title("EEG de sueño: espectro y complejidad por etapa")
-st.markdown("¿Cómo cambian la **dinámica espectral** y la **complejidad** del EEG entre las etapas del sueño? "
-            "Datos: Sleep-EDF Expanded (PhysioNet), epochs de 30 s.")
+st.title("EEG de sueño: qué cambia entre etapas y con la edad")
+st.markdown("En toda la muestra, **el EEG se vuelve más regular a medida que el sueño NREM se profundiza**, y "
+            "**la actividad sigma de N2 cae con la edad**. Datos: Sleep-EDF Expanded (PhysioNet), epochs de 30 s, "
+            "18 sujetos de 26 a 101 años. Los resultados son descriptivos.")
 
 if data.empty:
     st.warning("No hay observaciones para la combinación de filtros elegida.")
@@ -83,37 +86,48 @@ k3.metric("Horas", f"{len(data) * config.EPOCH_DURATION_S / 3600:.1f}")
 k4.metric("Epochs con artefacto", f"{100 * n_artifacts.mean():.1f} %")
 
 # ---------------------------------------------------------------------------
-# 1. Hipnograma
+# Pregunta 1: etapas
 # ---------------------------------------------------------------------------
-st.subheader("1 · Estructura de la noche")
-hyp_recording = st.selectbox("Registro para el hipnograma", sorted(base["recording_id"].unique()))
-st.plotly_chart(plots.hypnogram(base, hyp_recording), width="stretch")
+st.header("Pregunta 1 · Cuanto más profundo el sueño NREM, más regular el EEG")
+st.caption("¿Cómo varían la complejidad y la actividad espectral del EEG entre las etapas de sueño?")
 
-# ---------------------------------------------------------------------------
-# 2. Complejidad
-# ---------------------------------------------------------------------------
-st.subheader("2 · Complejidad por etapa")
 c1, c2 = st.columns(2)
 c1.plotly_chart(plots.metric_by_stage(data, "sample_entropy"), width="stretch")
 c2.plotly_chart(plots.metric_by_stage(data, "spectral_entropy"), width="stretch")
 st.caption("Sample Entropy mide la impredecibilidad temporal de la señal; Spectral Entropy, cuán repartida "
            "está la potencia entre frecuencias. Son métricas distintas: no se comparan en la misma escala.")
 
-# ---------------------------------------------------------------------------
-# 3. Espectro
-# ---------------------------------------------------------------------------
-st.subheader("3 · Potencia relativa por banda")
+st.subheader("La potencia se concentra en delta al llegar a N3")
 rel = relative_power_table(data)
 st.plotly_chart(plots.band_power_by_stage(rel, channel), width="stretch")
 st.plotly_chart(plots.stage_band_heatmap(rel, channel), width="stretch")
 
-# ---------------------------------------------------------------------------
-# 4. Relación espectro–complejidad
-# ---------------------------------------------------------------------------
-st.subheader("4 · Actividad delta vs complejidad")
+st.subheader("Más delta, menos complejidad")
 st.plotly_chart(plots.delta_vs_entropy(data, channel), width="stretch")
 st.caption("Asociación descriptiva, no causal: ambas variables dependen de la etapa de sueño. "
            "Las diferencias observadas no implican significancia estadística.")
+
+# ---------------------------------------------------------------------------
+# Pregunta 2: edad
+# ---------------------------------------------------------------------------
+st.header("Pregunta 2 · Con la edad cae la actividad sigma de N2")
+st.caption("¿Cómo cambia ese perfil con la edad? Cada punto es un sujeto. Elegí otra etapa o métrica para "
+           "hacer otro corte del cubo.")
+s1, s2 = st.columns(2)
+slice_stage = s1.selectbox("Etapa", plots.STAGE_ORDER, index=plots.STAGE_ORDER.index("N2"))
+slice_metric = s2.selectbox("Métrica", ["sigma_rel", "delta_rel", "sample_entropy", "spectral_entropy"],
+                            format_func=lambda m: plots.METRIC_LABELS.get(m, m))
+by_subject = (base[base["stage_code"] == slice_stage]
+              .groupby(["subject_id", "age", "channel"], as_index=False)[slice_metric].mean())
+if by_subject.empty:
+    st.info("La selección no tiene epochs de esta etapa.")
+else:
+    st.plotly_chart(plots.sigma_vs_age(by_subject, slice_metric, slice_stage), width="stretch")
+st.caption("Son 18 sujetos: es una tendencia descriptiva, no una estimación del efecto de la edad.")
+
+st.subheader("Cómo se distribuye la noche")
+hyp_recording = st.selectbox("Registro para el hipnograma", sorted(base["recording_id"].unique()))
+st.plotly_chart(plots.hypnogram(base, hyp_recording), width="stretch")
 
 with st.expander("Ver datos filtrados"):
     st.dataframe(data.drop(columns=["stage_order", "is_scored"]), width="stretch", hide_index=True)
