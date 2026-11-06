@@ -86,7 +86,7 @@ def inspect_recording(psg_path: Path, hyp_path: Path) -> dict:
         "eeg_sfreq_hz": eeg["sfreq_hz"].to_dict(),
         "eeg_units": eeg["physical_dim"].to_dict(),
         "eeg_prefilter": eeg["prefilter"].to_dict(),
-        "annotation_counts": pd.Series(annotations.description).value_counts().to_dict(),
+        "annotation_counts": pd.Series(_annotation_labels(annotations)).value_counts().to_dict(),
         "annotation_durations_multiple_of_epoch": bool(
             np.allclose(annotations.duration % config.EPOCH_DURATION_S, 0)
         ),
@@ -149,6 +149,15 @@ def load_eeg(psg_path: Path, hyp_path: Path) -> mne.io.Raw:
 # ---------------------------------------------------------------------------
 # Epoching y etapas de sueño
 # ---------------------------------------------------------------------------
+def _annotation_labels(annotations: mne.Annotations) -> np.ndarray:
+    """Etiquetas del hipnograma como texto de Python.
+
+    Según la versión de MNE y NumPy, `annotations.description` puede venir como `StringDType`,
+    que no admite `astype(str)`. Convertir elemento por elemento funciona en todas las versiones.
+    """
+    return np.array([str(label) for label in annotations.description], dtype=object)
+
+
 def annotations_to_epochs(annotations: mne.Annotations, psg_duration_s: float) -> pd.DataFrame:
     """Divide los segmentos del hipnograma en epochs de `EPOCH_DURATION_S`.
 
@@ -169,7 +178,7 @@ def annotations_to_epochs(annotations: mne.Annotations, psg_duration_s: float) -
 
     n_per_segment = np.round(durations / epoch_len).astype(int)
     starts = np.concatenate([o + epoch_len * np.arange(n) for o, n in zip(onsets, n_per_segment)])
-    descriptions = np.repeat(np.asarray(annotations.description, dtype=str), n_per_segment)
+    descriptions = np.repeat(_annotation_labels(annotations), n_per_segment)
 
     epochs = pd.DataFrame({
         "epoch_number": np.round(starts / epoch_len).astype(int),
