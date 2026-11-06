@@ -1,9 +1,6 @@
-"""Configuración central del proyecto.
-
-Todas las rutas se calculan relativamente a la raíz del repositorio, por lo que
-el proyecto funciona igual en VS Code, en un clon de GitHub o en Google Colab.
-Los parámetros metodológicos (bandas, umbrales, filtros) se definen acá para
-que no aparezcan "números mágicos" en el resto del código.
+"""Configuración del proyecto.
+En este archivo se definen todos los parámetros metodológicos como bandas de 
+frecuencias, umbrales y filtros.
 """
 
 from pathlib import Path
@@ -13,6 +10,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+# Directorios de datos y bases de datos. Se crean automáticamente si no existen.
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
 BIDS_DIR = DATA_DIR / "bids"
@@ -28,9 +26,8 @@ DOWNLOAD_MANIFEST_PATH = RAW_DIR / "download_manifest.csv"
 # Dataset: Sleep-EDF Expanded (PhysioNet)
 # ---------------------------------------------------------------------------
 PHYSIONET_BASE_URL = "https://physionet.org/files/sleep-edfx/1.0.0/"
-# Mirror oficial de PhysioNet en AWS Open Data (mismo contenido, ~50x más rápido
-# en pruebas). Se intenta primero; la integridad se verifica igual contra los
-# SHA256 oficiales, de modo que la fuente no altera los datos.
+# Mirror oficial de PhysioNet en AWS Open Data.
+# La integridad se verifica igual contra los SHA256.
 PHYSIONET_MIRROR_URLS = [
     "https://physionet-open.s3.amazonaws.com/sleep-edfx/1.0.0/",
     PHYSIONET_BASE_URL,
@@ -39,16 +36,15 @@ PHYSIONET_SUBSET = "sleep-cassette"           # estudio SC: sujetos sanos, sin m
 CHECKSUMS_FILENAME = "SHA256SUMS.txt"         # lista oficial de archivos + hashes
 SUBJECTS_METADATA_FILENAME = "SC-subjects.xls"
 
-# Selección de registros. Para escalar basta con cambiar estos valores.
+# Selección de registros
 #   - N_SUBJECTS: se toman los primeros N sujetos disponibles (orden por ID).
 #   - SUBJECT_IDS: lista explícita de IDs (tiene prioridad sobre N_SUBJECTS).
 #   - NIGHTS: noches a incluir (algunos sujetos tienen solo una).
 N_SUBJECTS = 18
-# Muestra estratificada: 3 mujeres y 3 hombres en cada grupo etario (los primeros
-# 10 IDs son todas mujeres de 25-34 años). Regla: 10 sujetos iniciales, los más
-# cercanos a los cuantiles 10/30/50/70/90 % de edad de cada sexo; los otros 8 se
-# agregan por grupo y sexo eligiendo la edad más alejada de las ya elegidas
-# (en empate, el ID más bajo). Siempre sujetos con 2 noches, y sin mirar sus señales.
+# Muestra estratificada de 18 sujetos: 3 mujeres y 3 hombres en cada grupo etario.
+# Regla: para cada sexo, los sujetos más cercanos a los cuantiles 10/30/50/70/90 % de edad; luego cada grupo y
+# sexo se completa hasta 3 con la edad más alejada de las ya elegidas (en empate, el ID más bajo).
+# Siempre sujetos con 2 noches, y sin mirar sus señales.
 #   <40:   F 5 (28 años), 6 (31), 4 (34)      M 10 (26), 14 (27), 16 (32)
 #   40-64: F 20 (51), 24 (54), 22 (56)        M 38 (51), 31 (54), 33 (60)
 #   65+:   F 40 (67), 65 (88), 61 (101)       M 50 (71), 76 (90), 73 (97)
@@ -71,11 +67,10 @@ EEG_CHANNELS = ["EEG Fpz-Cz", "EEG Pz-Oz"]
 EXPECTED_SFREQ_HZ = 100.0
 EPOCH_DURATION_S = 30.0
 
-# Recorte de vigilia: se conservan solo estos minutos de W antes del primer
-# epoch de sueño y después del último (los registros SC duran ~20 h).
+# Recorte de vigilia (W): se conservan solo estos minutos de W antes de la primera
+# época de sueño y después del último (los registros SC duran ~20 h).
 WAKE_PADDING_MIN = 30
-# El sueño se busca solo dentro de esta franja horaria (hora local del registro),
-# para que las siestas diurnas no extiendan la "noche" a todo el registro.
+# Se utiliza la siguiente franja horria de sueño (hora local del registro):
 NIGHT_START_HOUR = 21
 NIGHT_END_HOUR = 12
 
@@ -83,13 +78,12 @@ NIGHT_END_HOUR = 12
 L_FREQ_HZ = 0.5
 H_FREQ_HZ = 30.0
 # Señal extra conservada a cada lado de la ventana de análisis para que el
-# transitorio del filtro FIR (~6.6 s para 0.5 Hz) no afecte epochs analizados.
+# transitorio del filtro FIR (~6.6 s para 0.5 Hz) no afecte épocas analizadas.
 FILTER_EDGE_PAD_S = 30.0
 
 # ---------------------------------------------------------------------------
 # Etapas de sueño (R&K -> AASM simplificado)
 # ---------------------------------------------------------------------------
-# Las descripciones exactas se verifican en cada hipnograma.
 STAGE_MAPPING = {
     "Sleep stage W": "W",
     "Sleep stage 1": "N1",
@@ -99,7 +93,7 @@ STAGE_MAPPING = {
     "Sleep stage R": "REM",
     # No son etapas de sueño: se conservan pero NO se imputan.
     "Movement time": "MOVE",
-    "Sleep stage ?": "UNK",
+    "Sleep stage ?": "UNK", # Sin marcar por parte del experto (no confundir con artefacto)
 }
 SCORED_STAGES = ["W", "N1", "N2", "N3", "REM"]
 UNSCORED_STAGES = ["MOVE", "UNK"]
@@ -126,7 +120,7 @@ SAMPEN_ORDER = 2           # m; tolerancia r = 0.2 * SD (default de antropy)
 ARTIFACT_MIN_CLIPPED_SAMPLES = 10    # muestras en el límite físico del EDF por epoch (0.1 s): saturación
 ARTIFACT_MIN_STD_UV = 0.5            # señal plana / electrodo desconectado
 
-# Diagnóstico de outliers (notebook, sección de outliers). No modifica ninguna tabla.
+# Diagnóstico de outliers
 OUTLIER_TOP_FRACTION = 0.01    # cada detector multivariado marca la misma proporción de filas
 OUTLIER_MIN_VOTES = 4          # detectores (de 5) que deben coincidir para el consenso
 

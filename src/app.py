@@ -23,7 +23,7 @@ st.set_page_config(page_title="EEG de sueño", layout="wide")
 
 @st.cache_data(show_spinner="Leyendo el Data Warehouse...")
 def load_data(db_mtime: float) -> pd.DataFrame:
-    """Observaciones (epoch × canal) del DW. `db_mtime` invalida el caché si la base cambia."""
+    """Observaciones (época × canal) del DW. `db_mtime` invalida el caché si la base cambia."""
     return queries.load_observations()
 
 
@@ -57,7 +57,7 @@ recordings = sorted(obs.loc[obs["subject_id"].isin(chosen_subjects), "recording_
 chosen_recordings = st.sidebar.multiselect("Noche / registro", recordings, default=recordings)
 channel = st.sidebar.radio("Canal", sorted(obs["channel"].unique()))
 chosen_stages = st.sidebar.multiselect("Etapas de sueño", plots.STAGE_ORDER, default=plots.STAGE_ORDER)
-include_artifacts = st.sidebar.checkbox("Incluir epochs marcados como artefacto", value=False)
+include_artifacts = st.sidebar.checkbox("Incluir épocas marcadas como artefacto", value=False)
 st.sidebar.caption(f"Artefactos: ≥ {config.ARTIFACT_MIN_CLIPPED_SAMPLES} muestras saturadas, "
                    f"señal plana (SD < {config.ARTIFACT_MIN_STD_UV} µV) o valores no finitos.")
 
@@ -71,7 +71,7 @@ data = base[base["stage_code"].isin(chosen_stages)]
 # ---------------------------------------------------------------------------
 st.title("EEG de sueño: qué cambia entre etapas y con la edad")
 st.markdown("En toda la muestra, **el EEG se vuelve más regular a medida que el sueño NREM se profundiza**, y "
-            "**la actividad sigma de N2 cae con la edad**. Datos: Sleep-EDF Expanded (PhysioNet), epochs de 30 s, "
+            "**la potencia sigma de N2 es menor a mayor edad**. Datos: Sleep-EDF Expanded (PhysioNet), épocas de 30 s, "
             "18 sujetos de 26 a 101 años. Los resultados son descriptivos.")
 
 if data.empty:
@@ -80,10 +80,10 @@ if data.empty:
 
 n_artifacts = obs.loc[obs["recording_id"].isin(chosen_recordings) & (obs["channel"] == channel), "is_artifact"]
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("Epochs analizados", f"{len(data):,}".replace(",", "."))
+k1.metric("Épocas analizadas", f"{len(data):,}".replace(",", "."))
 k2.metric("Registros", data["recording_id"].nunique())
 k3.metric("Horas", f"{len(data) * config.EPOCH_DURATION_S / 3600:.1f}")
-k4.metric("Epochs con artefacto", f"{100 * n_artifacts.mean():.1f} %")
+k4.metric("Épocas con artefacto", f"{100 * n_artifacts.mean():.1f} %")
 
 # ---------------------------------------------------------------------------
 # Pregunta 1: etapas
@@ -120,7 +120,7 @@ slice_metric = s2.selectbox("Métrica", ["sigma_rel", "delta_rel", "sample_entro
 by_subject = (base[base["stage_code"] == slice_stage]
               .groupby(["subject_id", "age", "channel"], as_index=False)[slice_metric].mean())
 if by_subject.empty:
-    st.info("La selección no tiene epochs de esta etapa.")
+    st.info("La selección no tiene épocas de esta etapa.")
 else:
     st.plotly_chart(plots.sigma_vs_age(by_subject, slice_metric, slice_stage), width="stretch")
 st.caption("Son 18 sujetos: es una tendencia descriptiva, no una estimación del efecto de la edad.")

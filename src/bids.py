@@ -82,7 +82,7 @@ def convert_recording(psg_path: Path, hyp_path: Path, subject: int, night: int, 
     """Escribe un registro (PSG + hipnograma) en formato BIDS. Reutiliza si ya existe."""
     bids_path = make_bids_path(subject, night)
     if bids_path.fpath.exists() and not overwrite:
-        logger.info("BIDS existente, se reutiliza: %s", bids_path.basename)
+        logger.debug("BIDS existente, se reutiliza: %s", bids_path.basename)
         return bids_path
 
     raw = mne.io.read_raw_edf(psg_path, preload=False, verbose="error")
@@ -183,4 +183,6 @@ def run_bids(manifest: pd.DataFrame, overwrite: bool = False) -> pd.DataFrame:
                        "Borrar data/bids para regenerarlo solo con la selección.", stale)
     write_dataset_description()
     write_participants(sorted(files["subject"].unique()))
+    logger.info("BIDS: %d registros de %d sujetos en %s", len(rows), files["subject"].nunique(),
+                config.BIDS_DIR.relative_to(config.PROJECT_ROOT).as_posix())
     return pd.DataFrame(rows)

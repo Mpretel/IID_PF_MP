@@ -80,10 +80,10 @@ def stage_distribution(epochs_by_stage: pd.DataFrame) -> go.Figure:
         marker=dict(color=[STAGE_COLORS[s] for s in data["stage_code"]], cornerradius=4),
         text=[f"{p:.1f}%" for p in data["percent"]], textposition="outside",
         customdata=data[["hours", "percent"]],
-        hovertemplate="%{x}: %{y} epochs<br>%{customdata[0]:.2f} h (%{customdata[1]:.1f}%)<extra></extra>",
+        hovertemplate="%{x}: %{y} épocas<br>%{customdata[0]:.2f} h (%{customdata[1]:.1f}%)<extra></extra>",
     ))
     fig.update_layout(bargap=0.35, showlegend=False)
-    fig.update_yaxes(title="Epochs de 30 s")
+    fig.update_yaxes(title="Épocas de 30 s")
     return _style(fig, "Distribución de etapas de sueño (ventana de análisis)")
 
 
@@ -103,7 +103,7 @@ def hypnogram(obs: pd.DataFrame, recording_id: str) -> go.Figure:
             x=part["hour"], y=part["level"], mode="markers", name=stage,
             marker=dict(color=STAGE_COLORS[stage], size=6, symbol="square"),
             customdata=part[["epoch_number"]],
-            hovertemplate=f"{stage}<br>%{{x:.2f}} h desde el inicio del sueño<br>epoch %{{customdata[0]}}<extra></extra>"))
+            hovertemplate=f"{stage}<br>%{{x:.2f}} h desde el inicio del sueño<br>época %{{customdata[0]}}<extra></extra>"))
     unscored = rec[rec["level"].isna()]
     if not unscored.empty:
         fig.add_trace(go.Scatter(
@@ -192,7 +192,7 @@ def delta_vs_entropy(obs: pd.DataFrame, channel: str, x: str = "delta_rel", y: s
             marker=dict(color=STAGE_COLORS[stage], size=5, opacity=0.55, line=dict(width=0)),
             customdata=part[["recording_id", "epoch_number", "channel"]],
             hovertemplate=(f"{stage}<br>{METRIC_LABELS.get(x, x)}: %{{x:.3f}}<br>{METRIC_LABELS.get(y, y)}: %{{y:.3f}}"
-                           "<br>%{customdata[0]} · epoch %{customdata[1]} · %{customdata[2]}<extra></extra>")))
+                           "<br>%{customdata[0]} · época %{customdata[1]} · %{customdata[2]}<extra></extra>")))
     fig.update_xaxes(title=METRIC_LABELS.get(x, x))
     fig.update_yaxes(title=METRIC_LABELS.get(y, y))
     return _style(fig, f"{METRIC_LABELS.get(x, x)} vs {METRIC_LABELS.get(y, y)} · {channel}", height=480)

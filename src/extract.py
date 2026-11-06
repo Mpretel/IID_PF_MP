@@ -162,7 +162,8 @@ def download_records(records: pd.DataFrame) -> pd.DataFrame:
             ("Hypnogram", rec.relpath_hyp, rec.sha256_hyp, config.MIN_HYPNOGRAM_SIZE_BYTES),
         ]:
             path, status, url = _ensure_file(relpath, sha, min_size)
-            logger.info("%-9s %-24s %s", kind, path.name, status)
+            # Solo se informa lo que implicó trabajo; lo que ya estaba en caché va a DEBUG.
+            (logger.debug if status == "cached" else logger.info)("%-9s %-24s %s", kind, path.name, status)
             entries.append({
                 "recording_id": rec.recording_id,
                 "subject": rec.subject,
@@ -177,6 +178,9 @@ def download_records(records: pd.DataFrame) -> pd.DataFrame:
             })
     manifest = pd.DataFrame(entries)
     _update_manifest(manifest)
+    status = manifest["status"].value_counts()
+    logger.info("Archivos: %d (%d en caché, %d descargados)", len(manifest),
+                status.get("cached", 0), status.get("downloaded", 0))
     return manifest
 
 

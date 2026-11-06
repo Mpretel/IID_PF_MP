@@ -129,7 +129,7 @@ def validate_recording(info: dict) -> list[str]:
     if info["hypnogram_end_s"] > info["psg_duration_s"]:
         warnings.append(
             f"{name}: el hipnograma termina en {info['hypnogram_end_s']:.0f} s y la señal en "
-            f"{info['psg_duration_s']:.0f} s; los epochs sin señal se descartan al segmentar"
+            f"{info['psg_duration_s']:.0f} s; las épocas sin señal se descartan al segmentar"
         )
     return warnings
 

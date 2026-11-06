@@ -1,7 +1,7 @@
 # Complejidad y actividad espectral del EEG en las etapas del sueño
 
 Pipeline reproducible de Ingeniería de Datos sobre EEG de sueño público (Sleep-EDF Expanded, PhysioNet):
-descarga automática, organización BIDS, ETL en epochs de 30 s, métricas espectrales y de complejidad, control de
+descarga automática, organización BIDS, ETL en épocas de 30 s, métricas espectrales y de complejidad, control de
 calidad, base SQLite transaccional (3NF), Data Warehouse en esquema estrella, consultas SQL, visualizaciones Plotly
 y dashboard Streamlit.
 
@@ -22,9 +22,8 @@ descriptivos (sin inferencia estadística).
 sanas con hipnogramas puntuados por expertos. Se usan los canales EEG **Fpz-Cz** y **Pz-Oz** (100 Hz).
 
 Por defecto se procesan **18 sujetos × 2 noches**, estratificados por sexo y edad: 3 mujeres y 3 hombres en cada
-grupo etario (<40, 40-64 y 65+), de 26 a 101 años (`SUBJECT_IDS` en `src/config.py`). Los primeros 10 IDs del dataset
-son todas mujeres de 25–34 años, por eso no se usan. Con `SUBJECT_IDS = None` se toman los primeros `N_SUBJECTS`
-sujetos. Los archivos se descargan programáticamente y se verifican contra los SHA256 oficiales.
+grupo etario (<40, 40-64 y 65+), de 26 a 101 años (`SUBJECT_IDS` en `src/config.py`). Con `SUBJECT_IDS = None` se
+toman los primeros `N_SUBJECTS` sujetos. Los archivos se descargan programáticamente y se verifican contra los SHA256 oficiales.
 
 ## Arquitectura
 
@@ -75,8 +74,8 @@ Los datos no se versionan: todo `data/` se reconstruye desde la fuente pública 
 Requiere Python ≥ 3.10.
 
 ```bash
-git clone <URL-del-repositorio>
-cd <repositorio>
+git clone https://github.com/Mpretel/IID_PF_MP.git
+cd IID_PF_MP
 python -m venv .venv
 # Windows: .venv\Scripts\activate    ·    Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
@@ -104,9 +103,9 @@ genera BIDS, procesa los registros, construye ambas bases, ejecuta las consultas
 
 ## Ejecución en Google Colab
 
-1. Subir el repositorio a GitHub y completar `REPO_URL` en la primera celda de código del notebook.
-2. Abrir el notebook en Colab (*File → Open notebook → GitHub*).
-3. *Runtime → Run all*. La primera celda detecta Colab, clona el repositorio e instala `requirements.txt`.
+1. Abrir el notebook en Colab:
+   [colab.research.google.com/github/Mpretel/IID_PF_MP/blob/main/notebooks/TP_final.ipynb](https://colab.research.google.com/github/Mpretel/IID_PF_MP/blob/main/notebooks/TP_final.ipynb).
+2. *Runtime → Run all*. La primera celda detecta Colab, clona el repositorio e instala `requirements.txt`.
 
 ## Generación de las bases
 
@@ -172,7 +171,7 @@ Esquema estrella con `fact_eeg_epoch` y 3 dimensiones con surrogate keys: `dim_r
 `dim_sleep_stage`. Sujeto y grupo etario son una jerarquía dentro de `dim_recording`, porque cada registro pertenece a
 un único sujeto. Las dimensiones forman el cubo etapa × grupo etario × canal (5 × 3 × 2 = 30 celdas).
 
-**Grano**: una observación de features EEG correspondiente a un epoch de 30 segundos, un canal, un sujeto y un
+**Grano**: una observación de features EEG correspondiente a una época de 30 segundos, un canal, un sujeto y un
 registro.
 
 El ETL extrae desde el OLTP y materializa métricas derivadas, tiempo desde el inicio del sueño y flags de outlier.
@@ -192,7 +191,7 @@ drill-down.
 
 ## Trabajo futuro: almacenamiento de EEG continuo
 
-Este proyecto almacena features por epoch, un volumen que SQLite maneja sin problema. Para adquisición continua de
+Este proyecto almacena features por época, un volumen que SQLite maneja sin problema. Para adquisición continua de
 EEG (por ejemplo, *wearables* de sueño que transmiten muestras en tiempo real), una base de series temporales como
 **TimescaleDB** (PostgreSQL) sería más apropiada: particionado por tiempo, compresión, agregados continuos y
 políticas de retención. No es necesaria para este TP.

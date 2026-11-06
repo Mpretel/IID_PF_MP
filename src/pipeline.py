@@ -97,7 +97,7 @@ def process_recording(recording_id: str, psg_path: Path, hyp_path: Path, force: 
                       ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Procesa un registro completo. Devuelve (epochs, features, metadata del registro)."""
     if not force and (cached := _load_cache(recording_id)) is not None:
-        logger.info("%s: caché reutilizado", recording_id)
+        logger.debug("%s: caché reutilizado", recording_id)
         return cached
 
     info = preprocessing.inspect_recording(psg_path, hyp_path)
@@ -140,7 +140,7 @@ def process_recording(recording_id: str, psg_path: Path, hyp_path: Path, force: 
     epochs.to_parquet(paths["epochs"], index=False)
     table.to_parquet(paths["features"], index=False)
     paths["meta"].write_text(json.dumps(meta, indent=2))
-    logger.info("%s: %d epochs analizados, %d filas de features", recording_id, len(usable), len(table))
+    logger.info("%s: %d épocas analizadas, %d filas de features", recording_id, len(usable), len(table))
     return epochs, table, meta
 
 
